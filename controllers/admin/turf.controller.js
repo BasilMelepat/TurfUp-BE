@@ -100,17 +100,13 @@ export const adminEditTurfById = async (req, res) => {
   }
 
   const { id } = req.params;
-  const { sportTypes, sportsType, owner, ...otherDetails } = req.body;
-  
-  if (req.body.sportsType) {
-    sportTypes.push(sportsType);
-  }
-
-  const updatedTurfData = {
-    ...otherDetails,
-    owner, // Allow updating owner if provided
-    sportTypes,
-  };
+  const ALLOWED = ["name", "description", "location", "pricePerHour", "openTime", "closeTime", "image"];
+  const updatedTurfData = Object.fromEntries(
+    ALLOWED.filter((k) => req.body[k] !== undefined).map((k) => [k, req.body[k]])
+  );
+  const sportTypes = [].concat(req.body.sportTypes ?? [], req.body.sportsType ?? []);
+  if (sportTypes.length) updatedTurfData.sportTypes = sportTypes;
+  if (req.body.owner) updatedTurfData.owner = req.body.owner;
 
   try {
     const updatedTurf = await Turf.findById(id);

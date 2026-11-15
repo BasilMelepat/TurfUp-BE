@@ -6,7 +6,13 @@ import { format, parseISO, startOfDay } from "date-fns";
 // get all turfs
 export const getAllTurfs = async (req, res) => {
   try {
-    const turfs = await Turf.find({});
+    const docs = await Turf.find({}).populate("reviews", "rating").sort({ createdAt: -1 }).lean();
+    const turfs = docs.map(({ reviews = [], ...turf }) => ({
+      ...turf,
+      reviewCount: reviews.length,
+      averageRating: reviews.length ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : null,
+    }));
+    res.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
     return res.status(200).json({ turfs });
   } catch (err) {
     console.log(chalk.red("Error in getAllTurfs"), err);

@@ -30,6 +30,9 @@ export const createOrder = async (req, res) => {
   }
 };
 
+const refund = (paymentId) =>
+  razorpay.payments.refund(paymentId, {}).catch((e) => console.error("Refund failed", paymentId, e.message));
+
 export const verifyPayment = async (req, res) => {
   const userId = req.user.user;
 
@@ -39,7 +42,6 @@ export const verifyPayment = async (req, res) => {
     startTime,
     endTime,
     selectedTurfDate,
-    totalPrice,
     paymentId,
     orderId,
     razorpay_signature,
@@ -61,7 +63,11 @@ export const verifyPayment = async (req, res) => {
         .json({ success: false, message: "Payment Verification Failed" });
     }
 
-    // payment successful
+    const hours = (parseISO(endTime) - parseISO(startTime)) / 36e5;
+    if (!Number.isInteger(hours) || hours < 1 || hours > 3) {
+      await refund(paymentId);
+      return res.status(400).json({ success: false, message: "Invalid duration" });
+    }
 
     //  why format here?
     // This time is storing in DB for the time slot that is created
@@ -80,6 +86,28 @@ export const verifyPayment = async (req, res) => {
       return res
         .status(404)
         .json({ success: false, message: "Turf not found" });
+    }
+
+    const totalPrice = turf.pricePerHour * hours;
+    const [order, duplicate, overlap] = await Promise.all([
+      razorpay.orders.fetch(orderId),
+      Booking.exists({ "payment.paymentId": paymentId }),
+      TimeSlot.exists({
+        turf: turfId,
+        startTime: { $lt: adjustedEndTime },
+        endTime: { $gt: adjustedStartTime },
+      }),
+    ]);
+    if (duplicate) {
+      return res.status(409).json({ success: false, message: "Payment already used" });
+    }
+    if (order.amount !== totalPrice * 100) {
+      await refund(paymentId);
+      return res.status(400).json({ success: false, message: "Amount mismatch. Payment refunded" });
+    }
+    if (overlap) {
+      await refund(paymentId);
+      return res.status(409).json({ success: false, message: "Slot was just booked. Payment refunded" });
     }
 
     //  generate QR code
@@ -155,10 +183,8 @@ export const getBookings = async (req, res) => {
     .select("qrCode totalPrice")
     .populate("timeSlot", "startTime endTime")
     .populate("turf", "name location");
-      console.log(bookings, "bookings");
     return res.status(200).json(bookings);
   } catch (error) {
-    console.log(error);
     return res.status(500).json({ message: error.message });
   }
 };
