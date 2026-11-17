@@ -1,6 +1,6 @@
 {
   "name": "server",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -31,5 +31,5 @@
     "qrcode": "^1.5.4",
     "razorpay": "^2.9.5"
   },
-  "build": 4
+  "build": 5
 }
